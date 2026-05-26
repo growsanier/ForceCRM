@@ -1,678 +1,247 @@
 import React, { useState } from 'react';
 import { 
   Presentation, 
-  Plus, 
-  ExternalLink, 
-  RefreshCw, 
-  Loader2, 
-  CheckCircle, 
-  AlertCircle,
-  Play,
-  Share2,
-  Trash2,
-  BarChart4,
-  Briefcase,
+  Sparkles, 
+  Layers, 
+  FileText, 
+  Download, 
+  ChevronLeft, 
+  ChevronRight, 
+  Award, 
+  ArrowRight,
+  Target,
   Users2,
-  FileCode,
-  Sparkles,
-  Layers,
-  FileText
+  CheckCircle,
+  Play
 } from 'lucide-react';
-import { User } from 'firebase/auth';
 import { Contact, Lead, Opportunity } from '../types';
+import { playSound } from '../utils/sounds';
 
 interface SlidesProps {
   contacts: Contact[];
   leads: Lead[];
   opportunities: Opportunity[];
-  user: User | null;
-  googleAccessToken: string | null;
-  onConnectGoogle: () => void;
-}
-
-interface SavedDeck {
-  id: string;
-  title: string;
-  createdAt: string;
-  slidesCount: number;
+  user: any;
+  googleAccessToken?: string | null;
+  onConnectGoogle?: () => void;
 }
 
 export function Slides({ 
   contacts, 
   leads, 
   opportunities, 
-  user, 
-  googleAccessToken, 
-  onConnectGoogle 
+  user 
 }: SlidesProps) {
-  // Saved Presentations list (cached locally)
-  const [savedDecks, setSavedDecks] = useState<SavedDeck[]>(() => {
-    const saved = localStorage.getItem('crm_google_slides_decks');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [
-      {
-        id: '1',
-        title: 'Force Sphere Corporate CRM Sample (Preview)',
-        createdAt: new Date().toLocaleDateString(),
-        slidesCount: 3
-      }
-    ];
-  });
-
-  const [selectedDeckId, setSelectedDeckId] = useState<string>('1');
   const [deckTitle, setDeckTitle] = useState('Force Sphere Performance Pitch');
   const [deckStyle, setDeckStyle] = useState<'slate' | 'emerald' | 'royal'>('slate');
-  const [isLoading, setIsLoading] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'danger' | 'info'; msg: string } | null>(null);
+  const [activeSlide, setActiveSlide] = useState(0);
 
-  // Helper to persist generated presentations
-  const saveDeck = (id: string, title: string, count: number) => {
-    const newDeck: SavedDeck = {
-      id,
-      title,
-      createdAt: new Date().toLocaleDateString(),
-      slidesCount: count
-    };
-    const updated = [newDeck, ...savedDecks.filter(d => d.id !== '1')];
-    setSavedDecks(updated);
-    localStorage.setItem('crm_google_slides_decks', JSON.stringify(updated));
-    setSelectedDeckId(id);
+  // Prep metric variables
+  const activeContactsCount = contacts.length;
+  const topCompanies = Array.from(new Set(contacts.map(c => c.company).filter(Boolean))).slice(0, 4);
+  const totalLeads = leads.length;
+  const avgLeadScore = leads.length > 0 
+    ? Math.round(leads.reduce((acc, l) => acc + (l.score || 0), 0) / leads.length) 
+    : 80;
+  
+  const totalValue = opportunities.reduce((acc, op) => acc + op.amount, 0);
+  const formattedRevenue = new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD', 
+    maximumFractionDigits: 0 
+  }).format(totalValue);
+
+  // Slides Deck Configuration
+  const slidesList = [
+    {
+      title: "CRM Executive Overview",
+      subtitle: "Dynamic Sales & Operations Pitch Deck",
+      type: "title",
+      content: (
+        <div className="space-y-6 text-center py-6">
+          <Presentation className={`w-14 h-14 mx-auto ${
+            deckStyle === 'slate' ? 'text-slate-600' : 
+            deckStyle === 'emerald' ? 'text-emerald-600' : 'text-blue-600'
+          }`} />
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black md:text-3xl text-gray-900 tracking-tight">{deckTitle}</h1>
+            <p className="text-xs text-gray-500 font-mono uppercase tracking-widest">{user?.displayName || 'CRM Executive Office'} • Active Pitch Portfolio</p>
+          </div>
+          <div className="pt-4 max-w-sm mx-auto grid grid-cols-3 gap-2 text-center text-[10px] font-semibold text-gray-500 font-mono">
+            <div className="p-2 border border-slate-100 rounded-lg bg-slate-50/50">
+              <span className="block text-sm font-extrabold text-gray-800">{activeContactsCount}</span> Contacts
+            </div>
+            <div className="p-2 border border-slate-100 rounded-lg bg-slate-50/50">
+              <span className="block text-sm font-extrabold text-gray-800">{totalLeads}</span> Leads
+            </div>
+            <div className="p-2 border border-slate-100 rounded-lg bg-slate-50/50">
+              <span className="block text-sm font-extrabold text-gray-800">{formattedRevenue}</span> Value
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Inbound Lead Intelligence",
+      subtitle: "Marketing Pipeline Analytics and Target Forecasts",
+      type: "leads",
+      content: (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed font-sans">
+            Our marketing automation funnels compiled {totalLeads} prospect accounts with key lead score attributes ready for onboarding.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100/70 space-y-1">
+              <p className="text-[10px] uppercase font-mono font-bold text-gray-400">Average Lead Score</p>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-extrabold text-gray-800">{avgLeadScore}</span>
+                <span className="text-[10px] font-bold text-emerald-600">/ 100 Grade</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100/70 space-y-1">
+              <p className="text-[10px] uppercase font-mono font-bold text-gray-400">Lead Health</p>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-extrabold text-gray-800">
+                  {leads.filter(l => (l.score || 0) >= 80).length}
+                </span>
+                <span className="text-[10px] font-bold text-amber-600">Hot Prospects</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 bg-indigo-50/40 rounded-xl border border-indigo-100/50 space-y-1 text-xs">
+            <p className="font-bold text-indigo-900 flex items-center gap-1">
+              <Award className="w-3.5 h-3.5 text-indigo-600" /> Active Lead Engagement Blueprint:
+            </p>
+            <p className="text-[11px] text-indigo-700/80 leading-relaxed leading-normal font-sans">
+              All prospect records have been cataloged with assigned lead owners. Lead conversions are calculated based on historic sales stages.
+            </p>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Pipeline Revenue Opportunities",
+      subtitle: "ARR Valuation, Negotiations, & Projections Highlights",
+      type: "revenue",
+      content: (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed font-sans">
+            Your sales reps are driving enterprise opportunities spanning high ARR valuation categories to ensure robust annual growth.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100/70 space-y-1">
+              <p className="text-[10px] uppercase font-mono font-bold text-gray-400">Total Opportunity Pipeline</p>
+              <span className="text-lg font-black text-gray-800 tracking-tight">{formattedRevenue}</span>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100/70 space-y-1">
+              <p className="text-[10px] uppercase font-mono font-bold text-gray-400">Active Deals Count</p>
+              <span className="text-lg font-extrabold text-gray-800">{opportunities.length} Contracts</span>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-gray-150 space-y-1.5 text-xs text-gray-700 font-sans">
+            <p className="font-bold flex items-center gap-1"><Target className="w-3.5 h-3.5 text-amber-600" /> Current Quarter Target Scope:</p>
+            <div className="grid grid-cols-2 gap-1 text-[11px] font-mono text-gray-500">
+              <div>• Proposal Stages: {opportunities.filter(o => o.stage === 'Proposal').length}</div>
+              <div>• Lead Qualification Phase: {opportunities.filter(o => o.stage === 'New Lead').length}</div>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Key Account Engagements",
+      subtitle: "Contact Portfolio and Key Company Partnerships",
+      type: "portfolio",
+      content: (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed font-sans">
+            Strategic accounts are mapped with key decision makers to maintain high customer life-time retention values.
+          </p>
+
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase font-mono font-bold text-gray-400">Strategic Companies Engaged</p>
+            {topCompanies.length === 0 ? (
+              <p className="text-xs italic text-gray-400">No organizational records listed yet.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {topCompanies.map((comp, idx) => (
+                  <div key={idx} className="p-2 border border-gray-100 bg-gray-50/60 rounded-lg text-xs font-semibold text-gray-700 truncate flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    {comp}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="p-3 bg-emerald-50/40 rounded-xl border border-emerald-100/60 text-xs text-emerald-800 leading-relaxed">
+            <p className="font-bold flex items-center gap-1"><Users2 className="w-3.5 h-3.5 text-emerald-600" /> Executive Relationship Summary:</p>
+            <p className="text-[11px] text-emerald-700/90 font-sans mt-0.5">
+              Secure contacts mapped under dynamic portfolio grids are ready to match corporate lead outreach targets seamlessly.
+            </p>
+          </div>
+        </div>
+      )
+    }
+  ];
+
+  const handleNextSlide = () => {
+    playSound('click');
+    setActiveSlide((prev) => (prev + 1) % slidesList.length);
   };
 
-  const deleteDeck = (id: string, title: string) => {
-    const confirmed = window.confirm(`Remove deck "${title}" from your saved listing history? (This will not delete the file from your Google Drive)`);
-    if (!confirmed) return;
-    const updated = savedDecks.filter(d => d.id !== id);
-    setSavedDecks(updated);
-    localStorage.setItem('crm_google_slides_decks', JSON.stringify(updated));
-    if (selectedDeckId === id) {
-      setSelectedDeckId(updated[0]?.id || '');
-    }
+  const handlePrevSlide = () => {
+    playSound('click');
+    setActiveSlide((prev) => (prev - 1 + slidesList.length) % slidesList.length);
   };
 
-  // Google Slides API Integration Methods
-  const handleCreateCRMDeck = async () => {
-    if (!googleAccessToken) {
-      setFeedback({ type: 'danger', msg: 'Authentication with Google Slides is required to generate presentation files.' });
-      return;
-    }
+  const handleExportPrint = () => {
+    playSound('success');
+    window.print();
+  };
 
-    setIsLoading(true);
-    setFeedback(null);
+  // Theme styling helpers
+  const getThemeBg = () => {
+    if (deckStyle === 'emerald') return 'bg-[#023e2b] text-white';
+    if (deckStyle === 'royal') return 'bg-[#00386e] text-white';
+    return 'bg-slate-900 text-white';
+  };
 
-    try {
-      // 1. Create a blank Presentation file in Google Drive
-      const res = await fetch('https://slides.googleapis.com/v1/presentations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${googleAccessToken}`
-        },
-        body: JSON.stringify({
-          title: deckTitle || 'Force Sphere CRM Performance Deck'
-        })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Google Slides API failed with status code ${res.status}`);
-      }
-
-      const presentation = await res.json();
-      const presentationId = presentation.presentationId;
-
-      if (!presentationId) {
-        throw new Error('Google Slides returned an invalid Presentation ID schema.');
-      }
-
-      // 2. Fetch presentation pages so we know the default slide IDs
-      const getRes = await fetch(`https://slides.googleapis.com/v1/presentations/${presentationId}`, {
-        headers: { Authorization: `Bearer ${googleAccessToken}` }
-      });
-      const presentationData = await getRes.json();
-      
-      // Usually, Google Slides creates a default slide (page) on initialization
-      const defaultSlideId = presentationData.slides?.[0]?.objectId;
-
-      // 3. Prepare our CRM metrics to populate slides dynamically
-      const activeContactsCount = contacts.length;
-      const topCompanies = Array.from(new Set(contacts.map(c => c.company).filter(Boolean))).slice(0, 4);
-      
-      const totalLeads = leads.length;
-      const avgLeadScore = leads.length > 0 
-        ? Math.round(leads.reduce((acc, l) => acc + (l.score || 0), 0) / leads.length) 
-        : 80;
-      const hotLeads = leads.filter(l => (l.score || 0) >= 80).length;
-
-      const totalValue = opportunities.reduce((acc, op) => acc + op.amount, 0);
-      const activeNegotiations = opportunities.filter(op => op.stage === 'Proposal').length;
-      const formattedTotalRevenue = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(totalValue);
-
-      // Define some color coordinates based on selected style
-      let primaryColor = { red: 0.05, green: 0.09, blue: 0.16 }; // Slate / Deep Charcoal
-      if (deckStyle === 'emerald') {
-        primaryColor = { red: 0.02, green: 0.44, blue: 0.31 }; // Emerald
-      } else if (deckStyle === 'royal') {
-        primaryColor = { red: 0.0, green: 0.44, blue: 0.73 }; // Royal Blue
-      }
-
-      // Create instructions using BatchUpdate
-      const requests: any[] = [];
-
-      // A. Populate default slide elements if available, otherwise we will create our own custom structured slides
-      // Since default slide placeholders vary, we can safely delete default slide and create our own 3 slides
-      if (defaultSlideId) {
-        requests.push({
-          deleteObject: { objectId: defaultSlideId }
-        });
-      }
-
-      // Slide 1: Welcome/Title slide
-      const slide1Id = 'slide_welcome_crm';
-      requests.push(
-        {
-          createSlide: {
-            objectId: slide1Id,
-            slideLayoutReference: { predefinedLayout: 'BLANK' }
-          }
-        },
-        // Base dark border accent shape
-        {
-          createShape: {
-            objectId: 'slide1_bg',
-            shapeType: 'RECTANGLE',
-            elementProperties: {
-              pageId: slide1Id,
-              size: { width: { magnitude: 9144000, unit: 'EMU' }, height: { magnitude: 5140800, unit: 'EMU' } }, // Fill background
-              transform: { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          updateShapeProperties: {
-            objectId: 'slide1_bg',
-            fields: 'shapeBackgroundFill.solidFill.color',
-            shapeProperties: {
-              shapeBackgroundFill: {
-                solidFill: { color: { rgbColor: { red: 0.97, green: 0.98, blue: 0.99 } } } // Warm beige offwhite body
-              }
-            }
-          }
-        },
-        // Top colorful stripe
-        {
-          createShape: {
-            objectId: 'slide1_accent',
-            shapeType: 'RECTANGLE',
-            elementProperties: {
-              pageId: slide1Id,
-              size: { width: { magnitude: 9144000, unit: 'EMU' }, height: { magnitude: 300000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          updateShapeProperties: {
-            objectId: 'slide1_accent',
-            fields: 'shapeBackgroundFill.solidFill.color',
-            shapeProperties: {
-              shapeBackgroundFill: { solidFill: { color: { rgbColor: primaryColor } } }
-            }
-          }
-        },
-        // CRM Deck Title
-        {
-          createShape: {
-            objectId: 'slide1_title',
-            shapeType: 'TEXT_BOX',
-            elementProperties: {
-              pageId: slide1Id,
-              size: { width: { magnitude: 7500000, unit: 'EMU' }, height: { magnitude: 1500000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 820000, translateY: 1300000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          insertText: {
-            objectId: 'slide1_title',
-            text: deckTitle || 'Force Sphere CRM Live Overview Deck',
-            insertionIndex: 0
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide1_title',
-            fields: 'bold,fontSize,fontFamily,foregroundColor',
-            textRange: { type: 'ALL' },
-            style: {
-              bold: true,
-              fontSize: { magnitude: 36, unit: 'PT' },
-              fontFamily: 'Inter',
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.08, green: 0.12, blue: 0.20 } } }
-            }
-          }
-        },
-        // Subtitle text
-        {
-          createShape: {
-            objectId: 'slide1_subtitle',
-            shapeType: 'TEXT_BOX',
-            elementProperties: {
-              pageId: slide1Id,
-              size: { width: { magnitude: 7500000, unit: 'EMU' }, height: { magnitude: 1000000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 820000, translateY: 2800000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          insertText: {
-            objectId: 'slide1_subtitle',
-            text: `CRM Business Performance Analysis & Operations Report\nPrepared automatically for Sales Leadership • ${new Date().toLocaleDateString()}`,
-            insertionIndex: 0
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide1_subtitle',
-            fields: 'fontSize,fontFamily,foregroundColor,italic',
-            textRange: { type: 'ALL' },
-            style: {
-              fontSize: { magnitude: 14, unit: 'PT' },
-              fontFamily: 'Inter',
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.40, green: 0.45, blue: 0.55 } } },
-              italic: true
-            }
-          }
-        }
-      );
-
-      // Slide 2: Pipeline metrics Opportunity overview
-      const slide2Id = 'slide_metrics_crm';
-      requests.push(
-        {
-          createSlide: {
-            objectId: slide2Id,
-            slideLayoutReference: { predefinedLayout: 'BLANK' }
-          }
-        },
-        // BG Shape
-        {
-          createShape: {
-            objectId: 'slide2_bg',
-            shapeType: 'RECTANGLE',
-            elementProperties: {
-              pageId: slide2Id,
-              size: { width: { magnitude: 9144000, unit: 'EMU' }, height: { magnitude: 5140800, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          updateShapeProperties: {
-            objectId: 'slide2_bg',
-            fields: 'shapeBackgroundFill.solidFill.color',
-            shapeProperties: {
-              shapeBackgroundFill: { solidFill: { color: { rgbColor: { red: 0.98, green: 0.98, blue: 0.99 } } } }
-            }
-          }
-        },
-        // Left Column Title Accent Bar
-        {
-          createShape: {
-            objectId: 'slide2_accent_bar',
-            shapeType: 'RECTANGLE',
-            elementProperties: {
-              pageId: slide2Id,
-              size: { width: { magnitude: 250000, unit: 'EMU' }, height: { magnitude: 800000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 800000, translateY: 600000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          updateShapeProperties: {
-            objectId: 'slide2_accent_bar',
-            fields: 'shapeBackgroundFill.solidFill.color',
-            shapeProperties: {
-              shapeBackgroundFill: { solidFill: { color: { rgbColor: primaryColor } } }
-            }
-          }
-        },
-        // Slide 2 Header Text
-        {
-          createShape: {
-            objectId: 'slide2_header',
-            shapeType: 'TEXT_BOX',
-            elementProperties: {
-              pageId: slide2Id,
-              size: { width: { magnitude: 7000000, unit: 'EMU' }, height: { magnitude: 800000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 1200000, translateY: 600000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          insertText: {
-            objectId: 'slide2_header',
-            text: 'Live Sales Pipeline & Expected ARR',
-            insertionIndex: 0
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide2_header',
-            fields: 'bold,fontSize,fontFamily,foregroundColor',
-            textRange: { type: 'ALL' },
-            style: {
-              bold: true,
-              fontSize: { magnitude: 24, unit: 'PT' },
-              fontFamily: 'Inter',
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.1, green: 0.15, blue: 0.25 } } }
-            }
-          }
-        },
-        // Main Grid Column 1: Pipeline Value Highlight
-        {
-          createShape: {
-            objectId: 'slide2_col1',
-            shapeType: 'RECTANGLE',
-            elementProperties: {
-              pageId: slide2Id,
-              size: { width: { magnitude: 3500000, unit: 'EMU' }, height: { magnitude: 2800000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 800000, translateY: 1700000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          updateShapeProperties: {
-            objectId: 'slide2_col1',
-            fields: 'shapeBackgroundFill.solidFill.color,outline.outlineFill.solidFill.color',
-            shapeProperties: {
-              shapeBackgroundFill: { solidFill: { color: { rgbColor: { red: 0.94, green: 0.96, blue: 0.98 } } } },
-              outline: { outlineFill: { solidFill: { color: { rgbColor: { red: 0.85, green: 0.88, blue: 0.92 } } } } }
-            }
-          }
-        },
-        // Text inside Column 1
-        {
-          createShape: {
-            objectId: 'slide2_col1_text',
-            shapeType: 'TEXT_BOX',
-            elementProperties: {
-              pageId: slide2Id,
-              size: { width: { magnitude: 3100000, unit: 'EMU' }, height: { magnitude: 2400000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 1000000, translateY: 1900000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          insertText: {
-            objectId: 'slide2_col1_text',
-            text: `TOTAL CONTRACT POTENTIAL\n${formattedTotalRevenue}\n\nAccumulated value of opportunities and deals currently registered under active CRM negotiation logs and conversion pipelines.`,
-            insertionIndex: 0
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide2_col1_text',
-            fields: 'fontSize,fontFamily,foregroundColor,bold',
-            textRange: { type: 'ALL' },
-            style: {
-              fontSize: { magnitude: 11, unit: 'PT' },
-              fontFamily: 'Inter',
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.35, green: 0.4, blue: 0.5 } } }
-            }
-          }
-        },
-        // Apply larger font size specifically to the formattedTotalRevenue value string inside the box
-        {
-          updateTextStyle: {
-            objectId: 'slide2_col1_text',
-            fields: 'fontSize,bold,foregroundColor',
-            textRange: { startIndex: 25, endIndex: 25 + formattedTotalRevenue.length },
-            style: {
-              fontSize: { magnitude: 28, unit: 'PT' },
-              bold: true,
-              foregroundColor: { opaqueColor: { rgbColor: primaryColor } }
-            }
-          }
-        },
-        // Main Grid Column 2: CRM Metrics Bullet List
-        {
-          createShape: {
-            objectId: 'slide2_col2',
-            shapeType: 'TEXT_BOX',
-            elementProperties: {
-              pageId: slide2Id,
-              size: { width: { magnitude: 3800000, unit: 'EMU' }, height: { magnitude: 2800000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 4600000, translateY: 1700000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          insertText: {
-            objectId: 'slide2_col2_text',
-            text: `Pipeline Status & Statistics Summary\n\n• Core Opportunities logged:  ${opportunities.length} active deals\n• Interactive Negotiation stage:  ${activeNegotiations} deals current\n• Account Lead catalog size:  ${totalLeads} prospects\n• Estimated conversion average:  ${avgLeadScore}% index rating\n• Target High-Score prospects (>=80):  ${hotLeads} Hot Leads`,
-            insertionIndex: 0
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide2_col2_text',
-            fields: 'fontSize,fontFamily,foregroundColor,bold',
-            textRange: { type: 'ALL' },
-            style: {
-              fontSize: { magnitude: 13, unit: 'PT' },
-              fontFamily: 'Inter',
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.2, green: 0.25, blue: 0.35 } } }
-            }
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide2_col2_text',
-            fields: 'bold,fontSize,foregroundColor',
-            textRange: { startIndex: 0, endIndex: 37 },
-            style: {
-              bold: true,
-              fontSize: { magnitude: 15, unit: 'PT' },
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.1, green: 0.1, blue: 0.15 } } }
-            }
-          }
-        }
-      );
-
-      // Slide 3: Customer Matrix & Contact Directory Highlight
-      const slide3Id = 'slide_contacts_crm';
-      requests.push(
-        {
-          createSlide: {
-            objectId: slide3Id,
-            slideLayoutReference: { predefinedLayout: 'BLANK' }
-          }
-        },
-        // Page BG
-        {
-          createShape: {
-            objectId: 'slide3_bg',
-            shapeType: 'RECTANGLE',
-            elementProperties: {
-              pageId: slide3Id,
-              size: { width: { magnitude: 9144000, unit: 'EMU' }, height: { magnitude: 5140800, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          updateShapeProperties: {
-            objectId: 'slide3_bg',
-            fields: 'shapeBackgroundFill.solidFill.color',
-            shapeProperties: {
-              shapeBackgroundFill: { solidFill: { color: { rgbColor: { red: 0.98, green: 0.98, blue: 0.99 } } } }
-            }
-          }
-        },
-        // Header Bar Accent
-        {
-          createShape: {
-            objectId: 'slide3_accent_bar',
-            shapeType: 'RECTANGLE',
-            elementProperties: {
-              pageId: slide3Id,
-              size: { width: { magnitude: 250000, unit: 'EMU' }, height: { magnitude: 800000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 800000, translateY: 600000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          updateShapeProperties: {
-            objectId: 'slide3_accent_bar',
-            fields: 'shapeBackgroundFill.solidFill.color',
-            shapeProperties: {
-              shapeBackgroundFill: { solidFill: { color: { rgbColor: primaryColor } } }
-            }
-          }
-        },
-        // Slide 3 Title Text
-        {
-          createShape: {
-            objectId: 'slide3_header',
-            shapeType: 'TEXT_BOX',
-            elementProperties: {
-              pageId: slide3Id,
-              size: { width: { magnitude: 7000000, unit: 'EMU' }, height: { magnitude: 800000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 1200000, translateY: 600000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          insertText: {
-            objectId: 'slide3_header',
-            text: 'Account Directory & Enterprise Network',
-            insertionIndex: 0
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide3_header',
-            fields: 'bold,fontSize,fontFamily,foregroundColor',
-            textRange: { type: 'ALL' },
-            style: {
-              bold: true,
-              fontSize: { magnitude: 24, unit: 'PT' },
-              fontFamily: 'Inter',
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.1, green: 0.15, blue: 0.25 } } }
-            }
-          }
-        },
-        // Description text block
-        {
-          createShape: {
-            objectId: 'slide3_description',
-            shapeType: 'TEXT_BOX',
-            elementProperties: {
-              pageId: slide3Id,
-              size: { width: { magnitude: 7500000, unit: 'EMU' }, height: { magnitude: 3000000, unit: 'EMU' } },
-              transform: { scaleX: 1, scaleY: 1, translateX: 800000, translateY: 1600000, unit: 'EMU' }
-            }
-          }
-        },
-        {
-          insertText: {
-            objectId: 'slide3_description',
-            text: `Corporate Client Profiles Summary\n\nForce Sphere is currently managing ${activeContactsCount} enterprise contacts mapped across leading cloud hubs.\n\nPrimary Partners Active in Database Network:\n${topCompanies.map((c, idx) => `  ${idx + 1}. [Corporate Account] ${c}`).join('\n') || '  No companies logged yet.'}\n\nClient portfolios are cached securely with full Firebase synchronicity, ensuring sales reps maintain clean, aligned lines of contact across both desktop and workspace interfaces.`,
-            insertionIndex: 0
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide3_description',
-            fields: 'fontSize,fontFamily,foregroundColor,bold',
-            textRange: { type: 'ALL' },
-            style: {
-              fontSize: { magnitude: 12.5, unit: 'PT' },
-              fontFamily: 'Inter',
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.25, green: 0.3, blue: 0.4 } } }
-            }
-          }
-        },
-        {
-          updateTextStyle: {
-            objectId: 'slide3_description',
-            fields: 'bold,fontSize,foregroundColor',
-            textRange: { startIndex: 0, endIndex: 33 },
-            style: {
-              bold: true,
-              fontSize: { magnitude: 15, unit: 'PT' },
-              foregroundColor: { opaqueColor: { rgbColor: { red: 0.1, green: 0.1, blue: 0.15 } } }
-            }
-          }
-        }
-      );
-
-      // 4. Send the batchUpdate API request safely
-      const updateRes = await fetch(`https://slides.googleapis.com/v1/presentations/${presentationId}:batchUpdate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${googleAccessToken}`
-        },
-        body: JSON.stringify({ requests })
-      });
-
-      if (!updateRes.ok) {
-        const errText = await updateRes.text();
-        throw new Error(errText || 'Batch update to slide elements failed.');
-      }
-
-      // Save to local listing
-      saveDeck(presentationId, deckTitle || 'Force Sphere Presentation', 3);
-      setFeedback({
-        type: 'success',
-        msg: `Spectacular! Presentation "${deckTitle}" has been fully generated in Google Slides with live CRM highlights!`
-      });
-    } catch (err: any) {
-      console.error('Error creating presentation: ', err);
-      setFeedback({ type: 'danger', msg: err.message || 'Error occurred while communicating with Google Slides.' });
-    } finally {
-      setIsLoading(false);
-    }
+  const getThemeBorder = () => {
+    if (deckStyle === 'emerald') return 'border-emerald-600/35';
+    if (deckStyle === 'royal') return 'border-blue-600/35';
+    return 'border-slate-800/40';
   };
 
   return (
     <div className="space-y-6">
-      {/* Visual Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 rounded-2xl border border-slate-800 shadow-md">
-        <div className="space-y-1.5 pointer-events-none">
+      {/* App Header block */}
+      <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800/60 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">
               <Presentation className="w-5 h-5 animate-pulse" />
             </div>
-            <h2 className="text-xl font-bold tracking-tight text-white">Google Slides Pitch Builder</h2>
+            <h2 className="text-xl font-bold tracking-tight text-white">Interactive Pitch Deck Builder</h2>
           </div>
           <p className="text-xs text-slate-300 max-w-xl">
-            Populate elegant, real-time Google Slides presentation decks automatically based on your CRM opportunities, client statistics, and inbound marketing funnels.
+            Populate clean, modern business pitch slides in real-time based on your database contacts inventory, leads pipelines, and deal metrics.
           </p>
         </div>
 
-        <div className="shrink-0 flex items-center gap-3">
-          {!googleAccessToken ? (
-            <button
-              onClick={onConnectGoogle}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer flex items-center gap-2 shadow-sm shadow-emerald-900/35 transition-all"
-            >
-              <RefreshCw className="w-4 h-4" /> Link Google Presentation API
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="p-1 px-3 bg-emerald-950/40 text-emerald-400 border border-emerald-800/60 rounded-xl text-[10px] font-bold uppercase tracking-wide">
-                ● Live Presentation Cloud Synced
-              </span>
-            </div>
-          )}
+        <div className="shrink-0">
+          <button
+            onClick={handleExportPrint}
+            className="px-5 py-2.5 bg-[#0176d3] hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer flex items-center gap-2 transition-all shadow-md"
+          >
+            <Download className="w-4 h-4" /> Download/Print Pitch Deck
+          </button>
         </div>
       </div>
 
@@ -681,23 +250,23 @@ export function Slides({
         <div className="lg:col-span-5 space-y-6">
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-xs space-y-5">
             <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5 pb-2 border-b border-gray-50 uppercase tracking-tight font-mono">
-              <Sparkles className="w-4 h-4 text-amber-500" /> Dynamic Slide Formulation
+              <Sparkles className="w-4 h-4 text-amber-500" /> Slide Customizer
             </h3>
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 font-mono uppercase">Presentation Title</label>
+                <label className="text-[10px] font-bold text-gray-400 font-mono uppercase">Presentation Deck Title</label>
                 <input
                   type="text"
-                  placeholder="e.g. Q3 Sales Executive Deck"
-                  className="w-full px-3.5 py-2.5 border border-gray-200 bg-slate-50/50 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-medium text-gray-700"
+                  placeholder="e.g. Q4 Executive Business Review"
+                  className="w-full px-3.5 py-2.5 border border-gray-200 bg-slate-50/50 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-semibold text-gray-700"
                   value={deckTitle}
                   onChange={(e) => setDeckTitle(e.target.value)}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 font-mono uppercase">Brand Color Palette Theme</label>
+                <label className="text-[10px] font-bold text-gray-400 font-mono uppercase">Color Theme Mode</label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
@@ -710,7 +279,7 @@ export function Slides({
                   >
                     <span className="text-[10px]">Cool Stone</span>
                     <div className="flex gap-1">
-                      <div className="w-2.5 h-2.5 rounded-full bg-slate-800" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-slate-850" />
                       <div className="w-2.5 h-2.5 rounded-full bg-slate-500" />
                       <div className="w-2.5 h-2.5 rounded-full bg-slate-300" />
                     </div>
@@ -754,180 +323,118 @@ export function Slides({
 
               <div className="bg-slate-50 p-4 rounded-xl border border-gray-100 space-y-2 text-xs text-gray-500 leading-relaxed font-sans">
                 <p className="font-semibold text-gray-700 flex items-center gap-1">
-                  <Layers className="w-3.5 h-3.5 text-indigo-600" /> Automation Formulation Metrics:
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" /> Formulation Live Stats:
                 </p>
                 <div className="space-y-1 font-mono text-[10px] text-gray-400">
                   <div className="flex justify-between">
-                    <span>Active Contact Records:</span>
-                    <span className="text-gray-600 font-bold">{contacts.length}</span>
+                    <span>Active Partners Accounts:</span>
+                    <span className="text-gray-600 font-bold">{activeContactsCount}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Registered Inbound Leads:</span>
-                    <span className="text-gray-600 font-bold">{leads.length}</span>
+                    <span className="text-gray-600 font-bold">{totalLeads}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Current Pipeline Opportunities:</span>
-                    <span className="text-gray-600 font-bold">{opportunities.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Valuation ARR Highlights:</span>
-                    <span className="text-gray-600 font-bold">
-                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
-                        opportunities.reduce((acc, op) => acc + op.amount, 0)
-                      )}
-                    </span>
+                    <span>Estimated Pipeline Score:</span>
+                    <span className="text-gray-600 font-bold">{avgLeadScore} Grade</span>
                   </div>
                 </div>
               </div>
-
-              <button
-                type="button"
-                disabled={isLoading || !googleAccessToken}
-                onClick={handleCreateCRMDeck}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-150 disabled:text-gray-400 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Synthesizing CRM Presentation...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" /> Create Live Pitch Deck
-                  </>
-                )}
-              </button>
             </div>
           </div>
 
-          {/* Saved presentations listing */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-xs space-y-4">
             <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5 pb-2 border-b border-gray-50 uppercase tracking-tight font-mono">
-              <FileText className="w-4 h-4 text-indigo-500" /> Saved Decks History
+              <FileText className="w-4 h-4 text-indigo-500" /> Deck Structural Outlines
             </h3>
-
-            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-              {savedDecks.map((deck) => (
-                <div
-                  key={deck.id}
-                  onClick={() => setSelectedDeckId(deck.id)}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer text-left flex items-start justify-between gap-2 ${
-                    selectedDeckId === deck.id
-                      ? 'border-indigo-500 bg-indigo-50/10 shadow-xs'
-                      : 'border-gray-100 hover:border-gray-200'
+            <div className="space-y-2">
+              {slidesList.map((sl, index) => (
+                <button
+                  key={index}
+                  onClick={() => { playSound('click'); setActiveSlide(index); }}
+                  className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all flex items-center justify-between gap-2 ${
+                    activeSlide === index 
+                      ? 'bg-slate-900 text-white border-slate-950' 
+                      : 'bg-white hover:bg-slate-50 border-gray-150 text-gray-700'
                   }`}
                 >
-                  <div className="space-y-1 overflow-hidden min-w-0">
-                    <p className="text-xs font-bold text-gray-800 truncate" title={deck.title}>{deck.title}</p>
-                    <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono">
-                      <span>{deck.createdAt}</span>
-                      <span>•</span>
-                      <span>{deck.slidesCount} slides</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    {deck.id !== '1' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteDeck(deck.id, deck.title);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-slate-50 transition-colors"
-                        title="Delete history"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {deck.id !== '1' && (
-                      <a
-                        href={`https://docs.google.com/presentation/d/${deck.id}/edit`}
-                        target="_blank"
-                        rel="noreferrer referrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-slate-50 transition-colors"
-                        title="Open in Google Slides"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
+                  <span className="truncate">Slide {index + 1}: {sl.title}</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
+                </button>
               ))}
-
-              {savedDecks.length === 0 && (
-                <p className="text-xs text-center text-gray-400 py-4 font-sans leading-relaxed">No presentation decks saved yet. Formulate a pitch deck above to link live slideshow instances.</p>
-              )}
             </div>
           </div>
         </div>
 
         {/* Right Preview Column */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-xs flex flex-col h-full min-h-[500px] justify-between">
-            <div className="space-y-4 h-full flex flex-col">
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-xs flex flex-col justify-between space-y-4">
+            <div className="space-y-3.5">
               <div className="flex items-center justify-between border-b border-gray-50 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                  <span className="text-xs font-bold text-gray-800 truncate max-w-xs md:max-w-md">
-                    {savedDecks.find(d => d.id === selectedDeckId)?.title || "Live Presenter Console"}
+                  <span className="p-1 px-3 bg-indigo-50 text-[#0176d3] border border-indigo-100/60 rounded-xl text-[10px] font-extrabold uppercase tracking-wide">
+                    Live Formulator Preview
+                  </span>
+                  <span className="text-xs text-gray-400 font-mono">
+                    Slide {activeSlide + 1} of {slidesList.length}
                   </span>
                 </div>
 
-                {selectedDeckId !== '1' && (
-                  <a
-                    href={`https://docs.google.com/presentation/d/${selectedDeckId}/edit`}
-                    target="_blank"
-                    rel="noreferrer referrer"
-                    className="px-3 py-1.5 border border-indigo-100 text-indigo-600 hover:bg-indigo-50 text-[10px] font-bold uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handlePrevSlide}
+                    className="p-1.5 border border-gray-200 hover:bg-slate-50 rounded-lg cursor-pointer transition-all"
                   >
-                    Open Deck <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
+                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <button
+                    onClick={handleNextSlide}
+                    className="p-1.5 border border-gray-200 hover:bg-slate-50 rounded-lg cursor-pointer transition-all"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
               </div>
 
-              {/* Dynamic Slides iframe previewer */}
-              <div className="bg-slate-950 flex-1 rounded-xl relative overflow-hidden min-h-[340px] border border-slate-900 flex items-center justify-center">
-                {selectedDeckId === '1' ? (
-                  <div className="p-8 text-center max-w-md space-y-4 z-10 text-white">
-                    <Presentation className="w-12 h-12 text-indigo-400 mx-auto opacity-75 animate-bounce" />
-                    <div className="space-y-2.5">
-                      <p className="text-sm font-bold">Dynamic Interactive Sandbox Mode</p>
-                      <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                        Authenticate sheets/slides with your Google Account to create a real, fully compiled presentation automatically in Google Drive and see it render live directly inside CRM.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={onConnectGoogle}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold uppercase rounded-lg cursor-pointer flex items-center gap-1.5 mx-auto"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Initialize Presentation Link
-                      </button>
+              {/* Styled Slide Container */}
+              <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-xs bg-white aspect-[16/10] flex flex-col">
+                <div className={`p-4 ${getThemeBg()} flex justify-between items-center border-b ${getThemeBorder()}`}>
+                  <span className="text-xs font-black uppercase tracking-wider font-mono">Force Sphere CRM</span>
+                  <span className="text-[10px] uppercase tracking-widest font-mono opacity-80">Pitch slide {activeSlide + 1}</span>
+                </div>
+
+                <div className="flex-1 p-6 md:p-8 flex flex-col justify-center bg-slate-50/20">
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-[#0176d3] font-mono">
+                        {slidesList[activeSlide].subtitle}
+                      </span>
+                      <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight">
+                        {slidesList[activeSlide].title}
+                      </h3>
+                    </div>
+                    
+                    <div className="border-t border-gray-100 pt-3">
+                      {slidesList[activeSlide].content}
                     </div>
                   </div>
-                ) : (
-                  <iframe
-                    title="Google Slides Performance Deck"
-                    src={`https://docs.google.com/presentation/d/${selectedDeckId}/embed?start=false&loop=false&delayms=3000`}
-                    className="absolute inset-0 w-full h-full border-0 rounded-xl"
-                    allowFullScreen={true}
-                    referrerPolicy="no-referrer"
-                  />
-                )}
+                </div>
+
+                <div className="p-3 bg-slate-50/70 border-t border-gray-100 text-[10px] font-mono text-gray-400 flex justify-between items-center px-5">
+                  <span>Confidential CRM Business Overview</span>
+                  <span>Page {activeSlide + 1}</span>
+                </div>
               </div>
             </div>
 
-            {/* Display active state of feedback */}
-            {feedback && (
-              <div className={`mt-4 p-3 rounded-xl text-xs leading-relaxed flex items-center gap-2.5 ${
-                feedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' :
-                feedback.type === 'danger' ? 'bg-rose-50 text-rose-800 border border-rose-100' :
-                'bg-blue-50 text-blue-800 border border-blue-100'
-              }`}>
-                {feedback.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                <span>{feedback.msg}</span>
+            <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100/50 flex items-center gap-3">
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg shrink-0">
+                <CheckCircle className="w-4 h-4" />
               </div>
-            )}
+              <p className="text-xs text-emerald-800 leading-normal font-sans">
+                <b>Local Presentation formulated correctly!</b> This deck is dynamically updated when contacts, opportunities, or active leads change. No Google connection is needed!
+              </p>
+            </div>
           </div>
         </div>
       </div>

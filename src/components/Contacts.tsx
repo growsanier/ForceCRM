@@ -59,182 +59,115 @@ export function Contacts({
   const [formCompany, setFormCompany] = useState('');
   const [formTagsString, setFormTagsString] = useState('');
 
-  // Google Sheets Sync States
+  // Local CSV Spreadsheet Sync States
   const [isSheetsOpen, setIsSheetsOpen] = useState(false);
-  const [sheetSpreadsheetId, setSheetSpreadsheetId] = useState(() => localStorage.getItem('crm_contacts_spreadsheet_id') || '');
-  const [sheetImportRange, setSheetImportRange] = useState('Sheet1!A1:F100');
-  const [sheetExportRange, setSheetExportRange] = useState('Sheet1!A1');
   const [isSheetsLoading, setIsSheetsLoading] = useState(false);
   const [sheetsFeedback, setSheetsFeedback] = useState<{ type: 'success' | 'danger' | 'info'; msg: string } | null>(null);
 
-  // Sync / Export methods
-  const handleCreateNewContactsSheet = async () => {
-    if (!googleAccessToken) return;
+  // Download contacts as a clean standard CSV file
+  const handleExportContactsToSheet = () => {
     setIsSheetsLoading(true);
     setSheetsFeedback(null);
     try {
-      const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${googleAccessToken}`
-        },
-        body: JSON.stringify({
-          properties: { title: `Force Sphere CRM - Contacts Export (${new Date().toLocaleDateString()})` }
-        })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Google Sheets Api responded with status ${res.status}`);
-      }
-
-      const data = await res.json();
-      const newSpreadsheetId = data.spreadsheetId;
-      if (newSpreadsheetId) {
-        setSheetSpreadsheetId(newSpreadsheetId);
-        localStorage.setItem('crm_contacts_spreadsheet_id', newSpreadsheetId);
-
-        // Prep headers
-        const headerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${newSpreadsheetId}/values/Sheet1!A1:F1?valueInputOption=USER_ENTERED`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${googleAccessToken}`
-          },
-          body: JSON.stringify({
-            values: [['ID', 'Full Name', 'Email Address', 'Phone Number', 'Company Name', 'Tags']]
-          })
-        });
-
-        if (headerRes.ok) {
-          // Immediately append existing contacts if any
-          if (contacts.length > 0) {
-            await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${newSpreadsheetId}/values/Sheet1!A2:append?valueInputOption=USER_ENTERED`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${googleAccessToken}`
-              },
-              body: JSON.stringify({
-                values: contacts.map(c => [c.id, c.name, c.email, c.phone || '', c.company || '', c.tags?.join(', ') || ''])
-              })
-            });
-          }
-
-          setSheetsFeedback({
-            type: 'success',
-            msg: `Successfully created sheet: "${data.properties.title}" and populated ${contacts.length} entries!`
-          });
-        }
-      }
-    } catch(err: any) {
-      setSheetsFeedback({ type: 'danger', msg: err.message || 'Failed to auto-create Google Sheet.' });
-    } finally {
-      setIsSheetsLoading(false);
-    }
-  };
-
-  const handleExportContactsToSheet = async () => {
-    if (!googleAccessToken || !sheetSpreadsheetId) return;
-    setIsSheetsLoading(true);
-    setSheetsFeedback(null);
-    try {
-      const rowData = filteredContacts.map(c => [
-        c.id, 
-        c.name, 
-        c.email, 
-        c.phone || '', 
-        c.company || '', 
-        c.tags?.join(', ') || ''
+      const headers = ['ID', 'Full Name', 'Email Address', 'Phone Number', 'Company Name', 'Tags/Segments'];
+      const rows = filteredContacts.map(c => [
+        c.id,
+        `"${(c.name || '').replace(/"/g, '""')}"`,
+        `"${(c.email || '').replace(/"/g, '""')}"`,
+        `"${(c.phone || '').replace(/"/g, '""')}"`,
+        `"${(c.company || '').replace(/"/g, '""')}"`,
+        `"${(c.tags || []).join(', ').replace(/"/g, '""')}"`
       ]);
 
-      const appendRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetSpreadsheetId}/values/${sheetExportRange || 'Sheet1!A1'}:append?valueInputOption=USER_ENTERED`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${googleAccessToken}`
-        },
-        body: JSON.stringify({ values: rowData })
-      });
-
-      if (appendRes.ok) {
-        setSheetsFeedback({
-          type: 'success',
-          msg: `Successfully appended ${filteredContacts.length} contacts to your Google Sheet range!`
-        });
-      } else {
-        const errorText = await appendRes.text();
-        throw new Error(errorText || 'Failed to append contacts.');
-      }
-    } catch(err: any) {
-      setSheetsFeedback({ type: 'danger', msg: err.message || 'Sync export failed.' });
-    } finally {
-      setIsSheetsLoading(false);
-    }
-  };
-
-  const handleImportContactsFromSheet = async () => {
-    if (!googleAccessToken || !sheetSpreadsheetId) return;
-    const confirmed = window.confirm('Import contacts from Google Sheet into Force Sphere CRM catalog? Blank names index or already loaded items will be skipped.');
-    if (!confirmed) return;
-
-    setIsSheetsLoading(true);
-    setSheetsFeedback(null);
-    try {
-      const fetchRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetSpreadsheetId}/values/${sheetImportRange || 'Sheet1!A2:F100'}`, {
-        headers: { Authorization: `Bearer ${googleAccessToken}` }
-      });
-
-      if (!fetchRes.ok) {
-        throw new Error(`Google Sheets fetch returned status code ${fetchRes.status}`);
-      }
-
-      const rawData = await fetchRes.json();
-      const rows = rawData.values || [];
-      if (rows.length === 0) {
-        setSheetsFeedback({ type: 'info', msg: 'Specified range is completely empty or has no rows.' });
-        return;
-      }
-
-      let importCount = 0;
-      rows.forEach((row: any[]) => {
-        // Skip header lines
-        if (
-          row[0]?.toLowerCase().includes('name') || 
-          row[1]?.toLowerCase().includes('email') ||
-          row[0]?.trim() === 'ID'
-        ) return;
-
-        // Try reading Name, Email from columns
-        const name = row[1] || row[0];
-        const email = row[2] || row[1] || `${String(name).toLowerCase().replace(/\s+/g, '')}@example-imported.com`;
-        
-        if (name && name.trim()) {
-          const phone = row[3] || '+1 415-555-0199';
-          const company = row[4] || 'Imported Enterprise';
-          const tags = row[5] ? row[5].split(',').map((t: string) => t.trim()) : ['Sheet Import'];
-
-          onAddContact({
-            name,
-            email,
-            phone,
-            company,
-            tags,
-            ownerId: 'demo-user'
-          });
-          importCount++;
-        }
-      });
+      const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `crm_contacts_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
       setSheetsFeedback({
         type: 'success',
-        msg: `Batch import complete! Synced and registered ${importCount} active contacts from Sheet successfully.`
+        msg: `Successfully parsed and exported ${filteredContacts.length} contacts to a downloadable CSV spreadsheet file!`
       });
+      playSound('click');
     } catch (err: any) {
-      setSheetsFeedback({ type: 'danger', msg: err.message || 'Failed to import Sheet.' });
+      setSheetsFeedback({
+        type: 'danger',
+        msg: err.message || 'Error occurred while saving your CSV file.'
+      });
     } finally {
       setIsSheetsLoading(false);
     }
+  };
+
+  // Upload and parse contacts from a standard CSV file
+  const handleImportContactsFromCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsSheetsLoading(true);
+    setSheetsFeedback(null);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        if (!text) {
+          throw new Error('CSV file is empty or could not be processed.');
+        }
+
+        const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+        if (lines.length <= 1) {
+          throw new Error('This template has no database records. Make sure row columns exist.');
+        }
+
+        let importCount = 0;
+        // Parse CSV line-by-line using standard comma separation
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').trim());
+          if (row.length === 0) continue;
+
+          // Headers: ID (0), Full Name (1), Email Address (2), Phone Number (3), Company Name (4), Tags (5)
+          const name = row[1] || row[0];
+          if (name && name.trim()) {
+            const email = row[2] || `${String(name).toLowerCase().replace(/\s+/g, '')}@corp-imported.com`;
+            const phone = row[3] || '+1 415-555-0199';
+            const company = row[4] || 'Imported Venture';
+            const tagsStr = row[5] || '';
+            const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()) : ['CSV Import'];
+
+            await onAddContact({
+              name,
+              email,
+              phone,
+              company,
+              tags,
+              ownerId: user?.uid || 'demo'
+            });
+            importCount++;
+          }
+        }
+
+        setSheetsFeedback({
+          type: 'success',
+          msg: `Success! Successfully parsed CSV data sheet and imported ${importCount} contacts into local CRM sync.`
+        });
+        playSound('success');
+      } catch (err: any) {
+        setSheetsFeedback({
+          type: 'danger',
+          msg: err.message || 'Parsing failure. Ensure spreadsheet is formatted with standard comma delimiters.'
+        });
+      } finally {
+        setIsSheetsLoading(false);
+        e.target.value = ''; // Reset input element
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Extract unique tags for filtering options
@@ -371,7 +304,7 @@ export function Contacts({
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-slate-50'
               }`}
             >
-              <FileSpreadsheet className="w-4 h-4" /> Google Sheets Sync
+              <FileSpreadsheet className="w-4 h-4" /> CSV Sheets Sync
             </button>
           )}
 
@@ -399,154 +332,69 @@ export function Contacts({
                 <FileSpreadsheet className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-gray-900">Google Sheets CRM Synchronizer</h4>
-                <p className="text-[10px] text-gray-400 font-mono uppercase">Bidirectional Cloud Sheets System</p>
+                <h4 className="text-sm font-bold text-gray-900">CSV Spreadsheet Synchronizer</h4>
+                <p className="text-[10px] text-gray-400 font-mono uppercase">Offline Sheets Data System</p>
               </div>
             </div>
             
             <div className="flex items-center gap-2">
-              {!googleAccessToken ? (
-                <button
-                  onClick={onConnectGoogleCal}
-                  className="px-3.5 py-1.5 bg-[#0176d3] text-white text-xs font-bold rounded-lg cursor-pointer hover:bg-blue-700 flex items-center gap-1.5"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Initialize Sheets Integration
-                </button>
-              ) : (
-                <span className="text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-700 font-bold uppercase tracking-wide px-2.5 py-1 rounded-md">
-                  ● Cloud Connection Active
-                </span>
-              )}
+              <span className="text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-700 font-bold uppercase tracking-wide px-2.5 py-1 rounded-md">
+                ● Local Sync Sandbox Ready
+              </span>
               <button 
                 onClick={() => setIsSheetsOpen(false)}
-                className="p-1 px-2 text-xs text-gray-400 hover:text-gray-600 font-mono border border-gray-200 rounded-md"
+                className="p-1 px-2 text-xs text-gray-400 hover:text-gray-600 font-mono border border-gray-200 rounded-md cursor-pointer"
               >
                 ✕ Close
               </button>
             </div>
           </div>
 
-          {googleAccessToken ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
-              {/* Export Panel */}
-              <div className="space-y-3 bg-slate-50/50 p-4 rounded-xl border border-gray-150">
-                <h5 className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                  <Download className="w-3.5 h-3.5 text-emerald-600" /> Export Contacts to Sheets
-                </h5>
-                <p className="text-xs text-gray-500 leading-relaxed font-sans">
-                  Instantly push and map current database entries directly to an actual Google Spreadsheet in your account.
-                </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
+            {/* Export Panel */}
+            <div className="space-y-3 bg-slate-50/50 p-4 rounded-xl border border-gray-150">
+              <h5 className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5 text-emerald-600" /> Export Contacts to Spreadsheet (CSV)
+              </h5>
+              <p className="text-xs text-gray-500 leading-relaxed font-sans">
+                Instantly map, serialize, and download your entire filtered contacts catalog as an Excel/Google Sheets compatible standard CSV spreadsheet.
+              </p>
 
-                <div className="space-y-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 font-mono">Linked Spreadsheet ID</label>
-                    <input
-                      type="text"
-                      placeholder="Paste ID or leave blank to auto-create"
-                      className="w-full px-3 py-1.5 border border-gray-200 bg-white rounded-lg focus:outline-none text-xs font-mono text-gray-700"
-                      value={sheetSpreadsheetId}
-                      onChange={(e) => {
-                        setSheetSpreadsheetId(e.target.value);
-                        localStorage.setItem('crm_contacts_spreadsheet_id', e.target.value);
-                      }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-gray-400 font-mono">Export Destination</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Sheet1!A1 font-mono"
-                        className="w-full px-3 py-1.5 border border-gray-200 bg-white rounded-lg focus:outline-none text-xs font-mono text-gray-600"
-                        value={sheetExportRange}
-                        onChange={(e) => setSheetExportRange(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={handleCreateNewContactsSheet}
-                        disabled={isSheetsLoading}
-                        className="w-full py-2 bg-white hover:bg-indigo-50 text-indigo-700 hover:text-indigo-800 text-xs font-bold border border-indigo-200 rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs"
-                        title="Create a fresh Spreadsheet in your Google Drive automatically"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Auto-Create Sheet
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={!sheetSpreadsheetId || isSheetsLoading}
-                    onClick={handleExportContactsToSheet}
-                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-                  >
-                    {isSheetsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
-                    Append CRM Contacts to Sheet
-                  </button>
-                </div>
-              </div>
-
-              {/* Import Panel */}
-              <div className="space-y-3 bg-slate-50/50 p-4 rounded-xl border border-gray-150">
-                <h5 className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                  <Upload className="w-3.5 h-3.5 text-blue-600" /> Import Contacts from Sheets
-                </h5>
-                <p className="text-xs text-gray-500 leading-relaxed font-sans">
-                  Batch sync external customer lists from an existing Google Sheet directly into the local CRM database.
-                </p>
-
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 font-mono">Source Spreadsheet ID</label>
-                    <input
-                      type="text"
-                      placeholder="Paste ID matching your corporate spreadsheet"
-                      className="w-full px-3 py-1.5 border border-gray-200 bg-white rounded-lg focus:outline-none text-xs font-mono text-gray-700"
-                      value={sheetSpreadsheetId}
-                      onChange={(e) => {
-                        setSheetSpreadsheetId(e.target.value);
-                        localStorage.setItem('crm_contacts_spreadsheet_id', e.target.value);
-                      }}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 font-mono">Data Cells Range to Import</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Sheet1!A2:F30"
-                      className="w-full px-3 py-1.5 border border-gray-200 bg-white rounded-lg focus:outline-none text-xs font-mono text-gray-600"
-                      value={sheetImportRange}
-                      onChange={(e) => setSheetImportRange(e.target.value)}
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={!sheetSpreadsheetId || isSheetsLoading}
-                    onClick={handleImportContactsFromSheet}
-                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-                  >
-                    {isSheetsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
-                    Execute Lead Sheets Sync
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="py-6 text-center text-xs text-gray-500 font-sans max-w-lg mx-auto space-y-2">
-              <p>Link your safe Google Workspace account to securely view spreadsheets, sync CRM contacts dynamically, and collaborate in real-time.</p>
               <button
                 type="button"
-                onClick={onConnectGoogleCal}
-                className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold uppercase tracking-wider rounded-lg cursor-pointer flex items-center justify-center gap-1.5 mx-auto"
+                disabled={isSheetsLoading}
+                onClick={handleExportContactsToSheet}
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
               >
-                <RefreshCw className="w-3.5 h-3.5" /> Direct Google Sheets Link
+                {isSheetsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+                Download Contacts CSV Sheet
               </button>
             </div>
-          )}
+
+            {/* Import Panel */}
+            <div className="space-y-3 bg-slate-50/50 p-4 rounded-xl border border-gray-150">
+              <h5 className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5 text-blue-600" /> Import Contacts from Spreadsheet (CSV)
+              </h5>
+              <p className="text-xs text-gray-500 leading-relaxed font-sans">
+                Upload and import dynamic customer lists instantly. Accepts standard CSV templates with columns in order: <code>ID, Full Name, Email, Phone, Company, Tags</code>.
+              </p>
+
+              <div className="relative group">
+                <input
+                  type="file"
+                  accept=".csv"
+                  disabled={isSheetsLoading}
+                  onChange={handleImportContactsFromCSV}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className="py-2.5 px-4 border border-blue-200 border-dashed rounded-lg bg-blue-50/20 text-center hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
+                  <Database className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs font-semibold text-blue-600">Choose CSV Spreadsheet File...</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Feedback messages */}
           {sheetsFeedback && (

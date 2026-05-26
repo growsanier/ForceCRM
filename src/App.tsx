@@ -234,9 +234,6 @@ export default function App() {
     }
     try {
       const provider = new GoogleAuthProvider();
-      provider.addScope('https://www.googleapis.com/auth/calendar');
-      provider.addScope('https://www.googleapis.com/auth/spreadsheets');
-      provider.addScope('https://www.googleapis.com/auth/presentations');
       const result = await signInWithPopup(auth, provider);
       
       const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -244,12 +241,12 @@ export default function App() {
         setGoogleAccessToken(credential.accessToken);
         setNotification({
           type: 'success',
-          text: 'Google Authenticated: Live sync with Google Calendar & Google Sheets activated!'
+          text: 'Google Authenticated: Signed in successfully!'
         });
       } else {
         setNotification({
-          type: 'info',
-          text: 'Signed in with Google, but no access token was returned. Access to Calendar & Sheets may be restricted.'
+          type: 'success',
+          text: 'Signed in successfully with Google!'
         });
       }
     } catch(error) {
