@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Salesforce CRM Web Application",
+  "description": "A high-performance B2B Customer Relationship Management (CRM) directory and sales funnel pipeline, featuring interactive KPI dashboards, real-time lead qualification triggers, automated If-Then rule definitions, and multi-user sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

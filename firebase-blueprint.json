@@ -1,0 +1,113 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account registration with CRM role information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique user identification ID." },
+        "name": { "type": "string", "description": "Display name of the user." },
+        "email": { "type": "string", "format": "email", "description": "Email address of the user." },
+        "role": { "type": "string", "enum": ["Admin", "Manager", "Sales Rep"], "description": "The security access privilege level in this CRM." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the user account was provisioned." }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt"]
+    },
+    "Contact": {
+      "title": "Contact Details",
+      "description": "Information about a client contact, customer, or prospect manager.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the contact." },
+        "email": { "type": "string", "format": "email", "description": "Primary email of the contact." },
+        "phone": { "type": "string", "description": "Contact phone number." },
+        "company": { "type": "string", "description": "Employer or corporate association of the contact." },
+        "tags": { "type": "array", "description": "Associated search tags or segment labels." },
+        "ownerId": { "type": "string", "description": "The CRM User UID who manages/owns this client contact." }
+      },
+      "required": ["name", "email", "company", "ownerId"]
+    },
+    "Lead": {
+      "title": "Sales Lead",
+      "description": "Prospects captured from input streams, website forms, or marketing.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the prospect." },
+        "email": { "type": "string", "format": "email", "description": "Email of the prospect." },
+        "phone": { "type": "string", "description": "Phone number of the prospect." },
+        "company": { "type": "string", "description": "Company where the prospect works." },
+        "source": { "type": "string", "description": "Origin of the lead, e.g. Website, Referral, Cold Call." },
+        "score": { "type": "integer", "description": "Lead score (0-100) indicating likelihood to purchase." },
+        "status": { "type": "string", "enum": ["New", "Contacted", "Qualified", "Unqualified"], "description": "Lead status in sales cycle." },
+        "assignedTo": { "type": "string", "description": "Recipient UID of the sales agent handling the lead." },
+        "convertedAt": { "type": "string", "format": "date-time", "description": "Timestamp of conversion to Opportunity." }
+      },
+      "required": ["name", "status", "score"]
+    },
+    "Opportunity": {
+      "title": "Deal Opportunity",
+      "description": "Sales pipeline contracts, tracking stages, pricing, and close probabilities.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Name of the deal opportunity." },
+        "stage": { "type": "string", "enum": ["New Lead", "Contacted", "Qualified", "Proposal", "Won", "Lost"], "description": "The current stage in the Kanban deal pipeline." },
+        "amount": { "type": "number", "description": "Total estimated value of the deal in USD." },
+        "contactId": { "type": "string", "description": "Foreign key to the primary contact associated with this deal." },
+        "probability": { "type": "number", "description": "Success likelihood ratio between 0 and 100." }
+      },
+      "required": ["title", "stage", "amount"]
+    },
+    "Task": {
+      "title": "Calendar Task",
+      "description": "Activities, meetings, calls, and actions scheduled for deal progression.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Subject or request description." },
+        "dueDate": { "type": "string", "format": "date", "description": "Action deadline date." },
+        "assignedTo": { "type": "string", "description": "User UID who is scheduled to perform this activity." },
+        "relatedId": { "type": "string", "description": "ID of related resource (e.g. Contact ID, Opportunity ID, Lead ID)." },
+        "type": { "type": "string", "enum": ["Call", "Meeting", "Email", "Task"], "description": "Activity action class." }
+      },
+      "required": ["title", "dueDate", "assignedTo", "type"]
+    },
+    "Note": {
+      "title": "Record Notes",
+      "description": "Log comments, follow-up briefings, or call notes tied to accounts.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Unstructured commentary memo." },
+        "authorId": { "type": "string", "description": "UID of the agent who wrote this note." },
+        "relatedId": { "type": "string", "description": "Foreign relation record ID." },
+        "relatedType": { "type": "string", "enum": ["contact", "lead", "opportunity"], "description": "Entity collection name of the related model." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Time when this note was logged." }
+      },
+      "required": ["text", "authorId", "relatedId", "relatedType", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Stores user registration and CRM security authorization levels."
+    },
+    "contacts": {
+      "schema": "Contact",
+      "description": "Directory of business-to-business or personal customer contact files."
+    },
+    "leads": {
+      "schema": "Lead",
+      "description": "Captured sales prospects awaiting review and conversion."
+    },
+    "opportunities": {
+      "schema": "Opportunity",
+      "description": "The CRM interactive sales pipelines and stages."
+    },
+    "tasks": {
+      "schema": "Task",
+      "description": "Calendar schedule tracker for managing agenda items."
+    },
+    "notes": {
+      "schema": "Note",
+      "description": "Annotated activity log files linked to contacts, leads, and deals."
+    }
+  }
+}

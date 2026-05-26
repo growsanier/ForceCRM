@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 1. Users Collection rules
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow create, update: if isOwner(userId) && 
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.keys().hasAll(['uid', 'name', 'email', 'role', 'createdAt']) &&
+        request.resource.data.keys().size() == 5;
+    }
+
+    // 2. Contacts Directory rules
+    match /contacts/{contactId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && 
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.name != null;
+      allow update: if isSignedIn() && 
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == request.auth.uid;
+      allow delete: if isSignedIn() && 
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // 3. Leads Database rules
+    match /leads/{leadId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && 
+        request.resource.data.name != null &&
+        request.resource.data.status != null;
+      allow update, delete: if isSignedIn();
+    }
+
+    // 4. Opportunities/Deals Pipeline rules
+    match /opportunities/{oppId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.title != null &&
+        request.resource.data.stage != null;
+      allow update, delete: if isSignedIn();
+    }
+
+    // 5. Tasks Checklist rules
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.title != null &&
+        request.resource.data.type != null;
+      allow update, delete: if isSignedIn();
+    }
+
+    // 6. Audit Logging files
+    match /auditLogs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+    }
+  }
+}
